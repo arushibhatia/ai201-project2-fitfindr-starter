@@ -245,7 +245,7 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     # Guard: no outfit to caption — return a clear message, don't call the LLM.
     if not outfit or not outfit.strip():
         return (
-            "Can't make a fit card yet — there's no outfit to caption. "
+            "Can't make a fit card yet, there's no outfit to caption. "
             "Find an item and get a styling suggestion first."
         )
 
@@ -262,7 +262,7 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         f"Platform: {platform}\n"
         f"Outfit: {outfit}\n\n"
         "Rules:\n"
-        "- 1 to 2 short sentences, like a real caption — NOT a product description.\n"
+        "- 2 to 4 short sentences, like a real caption — NOT a product description.\n"
         f"- Mention the item name, the price ({price_str}), and the platform "
         f"({platform}) naturally, once each.\n"
         "- Capture the vibe of the outfit in specific terms.\n"
@@ -274,7 +274,7 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
-        temperature=1.0,
-        max_tokens=90,
+        temperature=0.7,
+        max_tokens=180,
     )
     return response.choices[0].message.content.strip()
