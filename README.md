@@ -156,7 +156,7 @@ The fallback order (in `_relaxations` in `agent.py`) is: drop the **size** filte
 
 When a loosened search succeeds, the loop records the change in `session["adjustment"]` (e.g. `"removed the size filter"`), and `app.py` prepends a note to the listing panel:
 
-> ⚠️ No exact matches, so I removed the size filter to find this. Here's the closest: …
+> No exact matches, so I removed the size filter to find this. Here's the closest: …
 
 For example, `"vintage graphic tee size XXXL under $30"` finds zero exact matches (no XXXL tees), so the agent drops the size filter, finds 20 tees under $30, and surfaces the top one with the note above. Only if every loosened attempt is still empty (e.g. `"designer ballgown size XXS under $5"`, which has no keyword match at all) does it fall back to the error message.
 
