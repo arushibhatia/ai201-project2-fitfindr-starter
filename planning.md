@@ -23,7 +23,7 @@ Filters the listings by size and price, then ranks what's left by how well it ma
 - `max_price` (float | None): keep only listings at or below this price. None means don't filter by price.
 
 **What it returns:**
-A list of listing dicts, best match first. Each dict has the full listing fields: `id`, `title`, `description`, `category`, `style_tags`, `size`, `condition`, `price`, `colors`, `brand`, `platform`. The score is how much the description overlaps with a listing's text.
+A list of listing dicts, best match first. Each dict has the full listing fields: `id`, `title`, `description`, `category`, `style_tags`, `size`, `condition`, `price`, `colors`, `brand`, `platform`. Listings are ranked by how many distinct description words appear across their text fields (title, description, tags, category, colors, brand), with total mentions breaking ties; common filler words are ignored, and anything with no overlap is dropped.
 
 **What happens if it fails or returns nothing:**
 Returns an empty list — never crashes. The planning loop sees the empty list, sets a user-friendly error message, and exits early.
