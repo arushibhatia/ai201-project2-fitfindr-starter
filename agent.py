@@ -18,7 +18,59 @@ Usage (once implemented):
     print(result["error"])   # None on success
 """
 
-from tools import search_listings, suggest_outfit, create_fit_card
+import json
+
+from tools import (
+    search_listings,
+    suggest_outfit,
+    create_fit_card,
+    _get_groq_client,
+)
+
+
+# ── query parsing ─────────────────────────────────────────────────────────────
+
+def _parse_query(query: str) -> dict:
+    """
+    Ask the LLM to pull search parameters out of a natural-language request.
+
+    Returns a dict with:
+        description (str)        — item keywords, "" if nothing to search for
+        size (str or None)       — size token, or None if not mentioned
+        max_price (float or None)— price ceiling, or None if not mentioned
+    """
+    prompt = (
+        "Extract search parameters from this thrifting request. "
+        "Respond with a JSON object with exactly these keys:\n"
+        '- "description": a short string of item keywords (e.g. '
+        '"vintage graphic tee"). Empty string if there is nothing to search for.\n'
+        '- "size": the size as a string (e.g. "M", "8"), or null if not mentioned.\n'
+        '- "max_price": the max price as a number, or null if not mentioned.\n\n'
+        f"Request: {query}"
+    )
+    client = _get_groq_client()
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+        response_format={"type": "json_object"},
+    )
+    data = json.loads(response.choices[0].message.content)
+
+    description = (data.get("description") or "").strip()
+
+    size = data.get("size")
+    if isinstance(size, str):
+        size = size.strip() or None
+
+    max_price = data.get("max_price")
+    if isinstance(max_price, str):
+        try:
+            max_price = float(max_price)
+        except ValueError:
+            max_price = None
+
+    return {"description": description, "size": size, "max_price": max_price}
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -92,9 +144,51 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     Before writing code, complete the Planning Loop and State Management sections
     of planning.md — your implementation should match what you described there.
     """
-    # TODO: implement the planning loop
+    # Step 1: fresh session for this interaction.
     session = _new_session(query, wardrobe)
-    session["error"] = "Planning loop not yet implemented."
+
+    # Step 2: parse the query into description / size / max_price.
+    session["parsed"] = _parse_query(query)
+    description = session["parsed"]["description"]
+    size = session["parsed"]["size"]
+    max_price = session["parsed"]["max_price"]
+
+    # No usable description → stop early, don't search on nothing.
+    if not description:
+        session["error"] = (
+            "Tell me what you're looking for — try describing the item, "
+            "like 'vintage graphic tee under $30'."
+        )
+        return session
+
+    # Step 3: search. This is the branch that decides whether we continue.
+    session["search_results"] = search_listings(description, size, max_price)
+    if not session["search_results"]:
+        bits = [f"\"{description}\""]
+        if size:
+            bits.append(f"size {size}")
+        if max_price is not None:
+            bits.append(f"under ${max_price:g}")
+        session["error"] = (
+            f"No listings matched {', '.join(bits)}. "
+            "Try raising your price, dropping the size, or different keywords."
+        )
+        return session  # do NOT call suggest_outfit with empty input
+
+    # Step 4: pick the top match as the item to work with.
+    session["selected_item"] = session["search_results"][0]
+
+    # Step 5: style the selected item against the wardrobe.
+    session["outfit_suggestion"] = suggest_outfit(
+        session["selected_item"], wardrobe
+    )
+
+    # Step 6: turn the outfit into a shareable caption.
+    session["fit_card"] = create_fit_card(
+        session["outfit_suggestion"], session["selected_item"]
+    )
+
+    # Step 7: done.
     return session
 
 

@@ -57,7 +57,7 @@ Turns the outfit suggestion + item into a short, casual caption you'd actually p
 - `new_item` (dict): the listing, used to drop in the item name, price, and platform.
 
 **What it returns:**
-A 2–4 sentence caption string that sounds like a real post, not a product description. Mentions the item name, price, and platform once each. Runs at a higher temperature so different inputs give different captions.
+A short caption string (1–2 sentences) that sounds like a real post, not a product description. Mentions the item name, price, and platform once each. Runs at a higher temperature so different inputs give different captions.
 
 **What happens if it fails or returns nothing:**
 If `outfit` is empty or blank, it returns a clear error message string instead of calling the LLM, so it never tries to caption nothing.

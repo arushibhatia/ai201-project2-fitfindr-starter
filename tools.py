@@ -186,9 +186,9 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
         prompt = (
             f"A shopper is considering this secondhand item:\n{item_desc}\n\n"
             "They haven't told us anything about their existing wardrobe yet. "
-            "Suggest one or two ways to style this piece in general — what kinds "
-            "of pieces pair well with it and what vibe it suits. Write 1-2 short "
-            "paragraphs, casual and friendly, like a stylist giving quick advice. "
+            "In 2-3 sentences, suggest how to style this piece in general — what "
+            "kinds of pieces pair well with it and what vibe it suits. Casual and "
+            "friendly, like a stylist giving quick advice. Keep it short. "
             "Do not invent specific items they own."
         )
     else:
@@ -197,10 +197,10 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
         prompt = (
             f"A shopper is considering this secondhand item:\n{item_desc}\n\n"
             f"Here is what's already in their wardrobe:\n{wardrobe_desc}\n\n"
-            "Suggest one or two complete outfits that pair the new item with "
-            "specific pieces from their wardrobe. Name the wardrobe pieces you "
-            "use. Write 1-2 short paragraphs, casual and friendly, like a "
-            "stylist talking them through it."
+            "Suggest one complete outfit (you may add a quick alternative) that "
+            "pairs the new item with specific pieces from their wardrobe. Name the "
+            "wardrobe pieces you use. Keep it to 2-3 short sentences, casual and "
+            "friendly, like a stylist talking them through it."
         )
 
     client = _get_groq_client()
@@ -208,6 +208,7 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
+        max_tokens=180,
     )
     return response.choices[0].message.content.strip()
 
@@ -261,7 +262,7 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         f"Platform: {platform}\n"
         f"Outfit: {outfit}\n\n"
         "Rules:\n"
-        "- 2 to 4 sentences, casual and authentic — NOT a product description.\n"
+        "- 1 to 2 short sentences, like a real caption — NOT a product description.\n"
         f"- Mention the item name, the price ({price_str}), and the platform "
         f"({platform}) naturally, once each.\n"
         "- Capture the vibe of the outfit in specific terms.\n"
@@ -274,5 +275,6 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
         temperature=1.0,
+        max_tokens=90,
     )
     return response.choices[0].message.content.strip()
