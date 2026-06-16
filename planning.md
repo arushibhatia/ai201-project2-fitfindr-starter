@@ -139,15 +139,16 @@ flowchart TD
 
 I plan to use Claude for all of the implementation portions, and providing it my planning.md file and prompting it to ask me any follow up questions before implementing. I will write tests for each component so we can validate the functionality.
 
-
+**Milestone 3 — Individual tool implementations:**
 - search_listings: I'll give Claude the Tool 1 block from this document (the inputs, the return value, the loose/case-insensitive size matching, and the empty-list failure mode) and tell it to use `load_listings()` from utils/data_loader.py. I expect a function that filters by size and max_price, scores by keyword overlap, drops zero-overlap listings, and returns the matches best-first. To verify, I'll check it actually uses all three params and handles the empty case, then run the pytest tests (results found, empty results, price filter) before moving on.
 - suggest_outfit: I'll give Claude the Tool 2 block from this document and the wardrobe schema, and ask it to call Groq (specificaly, llama-3.3-70b-versatile) and handle the empty-wardrobe case by switching to general advice that would be supplied by the LLM. I expect a function that always returns a non-empty string. I'll verify by running it once with the example wardrobe and once with the empty wardrobe and confirming both come back with usable text.
 - create_fit_card: I'll give Claude the Tool 3 block frmo this doc and ask for a caption that names the item, price, and platform once each and guards against a blank outfit. I expect a short caption string that highlights the item that's being focused on. I'll verify by running it a few times on the same input to confirm the output varies, and once with an empty outfit to confirm it returns the error string instead of crashing.
 
+**Milestone 4 — Planning loop and state management:**
 I'll give Claude the Architecture diagram plus the Planning Loop and State Management sections together, and ask it to implement `run_agent()` in agent.py following those steps. I expect code that parses the query, branches on the search result (empty → set error and return early, never calling suggest_outfit), stores each result in the session dict, and returns the session. Before trusting it I'll check that it actually branches instead of calling all three tools every time, that values get written to and read from the session, and then run both cases from agent.py — the happy path (fit card filled in) and the no-results path (error set, fit_card stays None). I'll do the same for `handle_query()` in app.py, giving Claude the State Management section so it maps the session fields to the right panels.
 
-**Milestone 3 — Individual tool implementations:**
-**Milestone 4 — Planning loop and state management:**
+
+
 
 ---
 
