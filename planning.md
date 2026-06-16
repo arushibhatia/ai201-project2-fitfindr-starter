@@ -77,7 +77,7 @@ If `outfit` is empty or blank, it returns a clear error message string instead o
 The agent keeps a session dict that holds everything for the run, and each step stores its result back into the session so the next step can read from it.
 
 1. Hand the query to the LLM and ask it to pull out a description, size, and max_price as JSON, and save that to the session. If there's no usable description, set an error and return early.
-2. Call search_listings with those parsed values and save the results. If the results are empty, set a helpful error message and return early — don't call suggest_outfit with nothing. If there are results, save the top one as the selected item and keep going.
+2. Call search_listings with those parsed values and save the results. If the results are empty, retry with loosened constraints before giving up (stretch — Retry Logic with Fallback): drop the size filter first, then the price limit, then both, stopping at the first attempt that returns matches. If a loosened search succeeds, record what was dropped in `session["adjustment"]` so the user can be told. Only if every loosened attempt is still empty do we set a helpful error message and return early — we never call suggest_outfit with nothing. If there are results, save the top one as the selected item and keep going.
 3. Call suggest_outfit with the selected item and the wardrobe, and save the suggestion. (The tool handles an empty wardrobe itself, so it always comes back with something.)
 4. Call create_fit_card with that suggestion and the selected item, and save the fit card.
 5. Return the session. It's done when the fit card is filled in (success) or an error got set along the way (stopped early at step 1 or 2).
@@ -98,6 +98,7 @@ Everything lives in one session dict (from `_new_session`), and tools never talk
 - `outfit_suggestion` — the string from suggest_outfit.
 - `fit_card` — the string from create_fit_card.
 - `error` — `None` normally, set to a message if the run stops early.
+- `adjustment` — `None` normally, set to a short note (e.g. "removed the size filter") when the search only succeeded after loosening the filters, so the UI can tell the user what changed.
 
 The hand-off works because each tool's output is stored under its own key and the next tool reads from there. For example, search_listings writes to `search_results`, the loop copies `search_results[0]` into `selected_item`, and suggest_outfit reads `selected_item` (plus `wardrobe`) — so the user never re-enters the item. Same chain again: suggest_outfit writes `outfit_suggestion`, and create_fit_card reads `outfit_suggestion` and `selected_item` to build the caption. At the end run_agent returns the whole dict, and app.py pulls `selected_item`, `outfit_suggestion`, `fit_card`, and `error` out of it to fill the three panels.
 
@@ -109,7 +110,7 @@ For each tool, describe the specific failure mode you're handling and what the a
 
 | Tool | Failure mode | Agent response |
 |------|-------------|----------------|
-| search_listings | No results match the query | Returns an empty list (never raises). The loop sees it's empty, sets a helpful error in the session ("nothing matched, try a higher price or different keywords"), and returns early without calling suggest_outfit. |
+| search_listings | No results match the query | Returns an empty list (never raises). The loop retries with loosened filters (drop size, then price, then both); if a retry finds matches it continues and records the adjustment for the user. If every loosened attempt is still empty, it sets a helpful error in the session ("nothing matched, try different keywords") and returns early without calling suggest_outfit. |
 | suggest_outfit | Wardrobe is empty | Switches to general styling advice for the item instead of naming pieces the user owns, so it still returns a usable string. |
 | create_fit_card | Outfit input is missing or incomplete | If `outfit` is empty/blank, returns a clear error message string without calling the LLM. |
 

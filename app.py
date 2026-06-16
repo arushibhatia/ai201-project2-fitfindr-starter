@@ -68,6 +68,12 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
         f"Size: {item['size']}\n\n"
         f"{item['description']}"
     )
+    # If the search only worked after loosening filters, tell the user up front.
+    if session.get("adjustment"):
+        listing_text = (
+            f"⚠️ No exact matches, so I {session['adjustment']} to find this. "
+            f"Here's the closest:\n\n{listing_text}"
+        )
     return listing_text, session["outfit_suggestion"], session["fit_card"]
 
 

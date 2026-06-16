@@ -99,7 +99,7 @@ Some detail on the inputs and outputs:
 `run_agent` in `agent.py` keeps one session dict and decides each step by checking what's already in it, so it doesn't run all three tools every time.
 
 1. Parse the query. The LLM pulls `description`, `size`, and `max_price` out of the raw query as JSON. If there's no usable description, the agent sets `session["error"]` and returns right away without calling any tools.
-2. Search. It calls `search_listings(description, size, max_price)` and stores the result in `session["search_results"]`. If the list is empty, it sets a `session["error"]` message and returns before calling `suggest_outfit`. If the list has matches, it stores `search_results[0]` as `session["selected_item"]` and keeps going.
+2. Search. It calls `search_listings(description, size, max_price)` and stores the result in `session["search_results"]`. If the list is empty, it retries with loosened filters before giving up (see [Retry with Fallback](#retry-with-fallback-stretch)): it drops the size filter, then the price limit, then both, stopping at the first attempt that returns matches, and records what was dropped in `session["adjustment"]`. Only if every loosened attempt is still empty does it set a `session["error"]` message and return before calling `suggest_outfit`. If the list has matches, it stores `search_results[0]` as `session["selected_item"]` and keeps going.
 3. Suggest an outfit. It calls `suggest_outfit(selected_item, wardrobe)` and stores the result in `session["outfit_suggestion"]`.
 4. Create the fit card. It calls `create_fit_card(outfit_suggestion, selected_item)` and stores the result in `session["fit_card"]`.
 5. Return the session, which ends with either `fit_card` set (success) or `error` set (stopped early at step 1 or 2).
@@ -128,6 +128,7 @@ Everything for a run lives in one session dict, created by `_new_session`. The t
 - `outfit_suggestion`: the string from `suggest_outfit`
 - `fit_card`: the string from `create_fit_card`
 - `error`: `None` normally, or a message if the run stopped early
+- `adjustment`: `None` normally, or a short note ("removed the size filter") when the search only succeeded after loosening filters, so the UI can tell the user what changed
 
 The data is passed by reference, not re-entered. `search_listings` writes `search_results`, the loop copies `search_results[0]` into `selected_item`, and that same object goes into `suggest_outfit`. Its output becomes `outfit_suggestion`, which goes straight into `create_fit_card`. At the end, `app.py` reads `selected_item`, `outfit_suggestion`, `fit_card`, and `error` from the session to fill the three UI panels.
 
@@ -137,7 +138,7 @@ Each tool handles its own failure mode, and none of them crash the agent.
 
 | Tool | Failure mode | What happens |
 |------|--------------|--------------|
-| `search_listings` | No listings match | Returns an empty list instead of raising. The loop sees the empty list, sets `session["error"]`, and stops before calling `suggest_outfit`. |
+| `search_listings` | No listings match | Returns an empty list instead of raising. The loop retries with loosened filters (drop size, then price, then both); if a retry finds matches it continues and tells the user what was adjusted. Only if every loosened attempt is still empty does it set `session["error"]` and stop before calling `suggest_outfit`. |
 | `suggest_outfit` | Wardrobe is empty | Switches to general styling advice instead of naming owned pieces, so it still returns a useful non-empty string. |
 | `create_fit_card` | Outfit is missing or blank | Returns a clear error message string without calling the LLM. |
 
@@ -146,6 +147,18 @@ Examples from testing:
 - No results: `search_listings("designer ballgown", "XXS", 5)` returns `[]`. The full agent then sets `session["error"]` to `No listings matched "designer ballgown", size XXS, under $5. Try raising your price, dropping the size, or different keywords.` and leaves `session["fit_card"]` as `None`. `suggest_outfit` was never called on this path.
 - Empty wardrobe: `suggest_outfit(item, get_empty_wardrobe())` returns general advice like "This graphic tee is perfect for a laid-back, grunge-inspired look. You can pair it with distressed denim, skirts, or even shorts..." with no made-up owned pieces and no exception.
 - Blank outfit: `create_fit_card("", item)` returns "Can't make a fit card yet, there's no outfit to caption. Find an item and get a styling suggestion first." instead of raising or calling the LLM.
+
+## Retry with Fallback (Stretch)
+
+When `search_listings` returns nothing, the agent doesn't stop right away — it automatically retries with progressively looser filters and tells the user what it changed, instead of just reporting "no results."
+
+The fallback order (in `_relaxations` in `agent.py`) is: drop the **size** filter first, then the **price** limit, then **both**. The loop tries each in turn and stops at the first one that returns matches. Each step is only attempted if it actually loosens something — a query with no size or price has nothing to relax, so it skips straight to the error.
+
+When a loosened search succeeds, the loop records the change in `session["adjustment"]` (e.g. `"removed the size filter"`), and `app.py` prepends a note to the listing panel:
+
+> ⚠️ No exact matches, so I removed the size filter to find this. Here's the closest: …
+
+For example, `"vintage graphic tee size XXXL under $30"` finds zero exact matches (no XXXL tees), so the agent drops the size filter, finds 20 tees under $30, and surfaces the top one with the note above. Only if every loosened attempt is still empty (e.g. `"designer ballgown size XXS under $5"`, which has no keyword match at all) does it fall back to the error message.
 
 ## Spec Reflection
 

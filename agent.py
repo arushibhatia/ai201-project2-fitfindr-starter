@@ -94,7 +94,26 @@ def _new_session(query: str, wardrobe: dict) -> dict:
         "outfit_suggestion": None,   # string returned by suggest_outfit
         "fit_card": None,            # string returned by create_fit_card
         "error": None,               # set if the interaction ended early
+        "adjustment": None,          # note set if search only worked after loosening filters
     }
+
+
+# ── retry fallback ────────────────────────────────────────────────────────────
+
+def _relaxations(size, max_price):
+    """
+    Ordered list of loosened (size, max_price, note) searches to try when the
+    strict search returns nothing. Drops the size filter first, then the price
+    limit, then both — each step only included if it actually loosens something.
+    """
+    attempts = []
+    if size is not None:
+        attempts.append((None, max_price, "removed the size filter"))
+    if max_price is not None:
+        attempts.append((size, None, "removed the price limit"))
+    if size is not None and max_price is not None:
+        attempts.append((None, None, "removed the size and price filters"))
+    return attempts
 
 
 # ── step logging ──────────────────────────────────────────────────────────────
@@ -202,20 +221,41 @@ def run_agent(query: str, wardrobe: dict, verbose: bool = False,
         f"max_price={max_price!r})")
     session["search_results"] = search_listings(description, size, max_price)
     log(f"    → {len(session['search_results'])} listing(s) matched")
+
+    # Fallback: if the strict search found nothing, retry with loosened filters
+    # rather than giving up immediately. Stop at the first attempt that matches.
+    if not session["search_results"]:
+        for r_size, r_price, note in _relaxations(size, max_price):
+            log(f"    ↻ no matches — retrying ({note}): "
+                f"search_listings({description!r}, size={r_size!r}, "
+                f"max_price={r_price!r})")
+            retry = search_listings(description, r_size, r_price)
+            log(f"      → {len(retry)} listing(s) matched")
+            if retry:
+                session["search_results"] = retry
+                session["adjustment"] = note
+                break
+
     if not session["search_results"]:
         bits = [f"\"{description}\""]
         if size:
             bits.append(f"size {size}")
         if max_price is not None:
             bits.append(f"under ${max_price:g}")
+        had_filters = size is not None or max_price is not None
+        tail = " — even after dropping the size and price filters" if had_filters else ""
         session["error"] = (
-            f"No listings matched {', '.join(bits)}. "
-            "Try raising your price, dropping the size, or different keywords."
+            f"No listings matched {', '.join(bits)}{tail}. "
+            "Try different keywords or describing the item another way."
         )
-        log("    ✗ 0 results → set session['error'] and stop BEFORE "
-            "suggest_outfit")
+        log("    ✗ 0 results (even after loosening) → set session['error'] and "
+            "stop BEFORE suggest_outfit")
         log(f"    error: {session['error']}")
         return session  # do NOT call suggest_outfit with empty input
+
+    if session["adjustment"]:
+        log(f"    ⚠ no exact matches — {session['adjustment']} to find the "
+            "closest options")
 
     # Step 4: pick the top match as the item to work with.
     session["selected_item"] = session["search_results"][0]
